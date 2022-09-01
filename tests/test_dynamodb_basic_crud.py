@@ -1,14 +1,21 @@
+import json
+from decimal import Decimal
+
 import boto3
+from boto3.dynamodb.conditions import Attr, Key
 import pytest
+from pprint import pprint as pp
+
 
 URL = "http://localhost:8765"
+TableName = "event_records"
 
 
 @pytest.mark.timeout(0.5)
 class TestBasicCRUD:
 
     c = boto3.resource("dynamodb", endpoint_url=URL)
-    t = c.Table("demoCreateTable")
+    t = c.Table(TableName)
 
     def test_create_table(self):
         """
@@ -16,24 +23,24 @@ class TestBasicCRUD:
         """
         
         self.c.create_table(
-            TableName="demoCreateTable",
+            TableName=TableName,
             AttributeDefinitions=[
                 {
-                    "AttributeName": "kk",
+                    "AttributeName": "event",
                     "AttributeType": "S"
                 },
                 {
-                    "AttributeName": "rr",
+                    "AttributeName": "date",
                     "AttributeType": "S"
                 },
             ],
             KeySchema=[
                 {
-                    "AttributeName": "kk",
+                    "AttributeName": "event",
                     "KeyType": "HASH"
                 },
                 {
-                    "AttributeName": "rr",
+                    "AttributeName": "date",
                     "KeyType": "RANGE"
                 },
             ],
@@ -53,42 +60,63 @@ class TestBasicCRUD:
         )
 
     def test_insert_item(self):
+        item = json.loads(json.dumps({
+                "event": "body-health",
+                "date": "2022-04-30",
+                "weight": 111
+            }), parse_float=Decimal)
         self.t.put_item(
-            Item={
-                "kk": "1",
-                "rr": "2"
-            }
+            Item=item
         )
 
     def test_update_item(self):
-        self.t.update_item(
+        u = self.t.update_item(
             Key={
-                "kk": "1",
-                "rr": "2"
+                "event": "body-health",
+                "date": "2014-09-11"
             },
-            UpdateExpression="SET age = :vall",
+            UpdateExpression="SET weight = :vall",
             ExpressionAttributeValues={
-                ":vall" : "35"
+                ":vall" : 69
             }
         )
 
     def test_get_item(self):
         res = self.t.get_item(
             Key={
-                "kk": "1",
-                "rr": "2"
+                "event": "body-health",
+                "date": "2014-09-11"
             }
         )
         print(res["Item"])
 
+    def test_scan_with_conditions(self):
+        # 慎用!! 耗費大量 RCU
+        res = self.t.scan(
+            FilterExpression=Attr('weight').lte(Decimal(70))
+        )
+        pp(res["Items"])
+
     def test_delete_item(self):
         self.t.delete_item(
             Key={
-                "kk": "1",
-                "rr": "2"
+                "event": "body-health",
+                "date": "2014-09-11"
             }
         )
 
+    def test_query_item(self):
+        res = self.t.query(
+            KeyConditionExpression=Key("event").eq("body-health") & 
+                Key("date").between("2018-01-01", "2021-12-31")
+        )
+        pp(res["Items"])
+
+    def test_list_tables(self):
+        c = boto3.client("dynamodb", endpoint_url=URL)
+        tbls = c.list_tables(Limit=10)["TableNames"]
+        print(tbls)
+
     def test_delete_table(self):
         c = boto3.client("dynamodb", endpoint_url=URL)
-        c.delete_table(TableName="demoCreateTable")
+        c.delete_table(TableName=TableName)

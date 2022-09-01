@@ -3,5 +3,5 @@
 
 ```bash
 ### test specific function
-pytest -v tests/test_table_init.py -k 'test_create_table'
+pytest -vrP tests/test_dynamodb_basic_crud.py -k 'test_scan_all_items'
 ```
